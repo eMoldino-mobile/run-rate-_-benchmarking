@@ -411,8 +411,8 @@ def create_excel_export(df_view, results, tolerance, run_interval_hours, analysi
             row += 1
         ws_raw = workbook.add_worksheet('Exported_Raw_Data')
         df_to_export = df_view.copy()
-        if 'month' in df_to_export.columns:
-            df_to_export['month'] = df_to_export['month'].astype(str)
+        if 'shot_time' in df_to_export.columns: df_to_export['shot_time'] = df_to_export['shot_time'].astype(str)
+        if 'month' in df_to_export.columns: df_to_export['month'] = df_to_export['month'].astype(str)
         df_to_export.replace([np.inf, -np.inf], np.nan, inplace=True)
         df_to_export = df_to_export.fillna('')
         for col_num, value in enumerate(df_to_export.columns.values):
@@ -421,8 +421,8 @@ def create_excel_export(df_view, results, tolerance, run_interval_hours, analysi
             ws_raw.write_row(row_num, 0, row_data)
         ws_calc = workbook.add_worksheet('Calculations_Data')
         calc_df = results.get('processed_df', pd.DataFrame()).copy()
-        if 'month' in calc_df.columns:
-            calc_df['month'] = calc_df['month'].astype(str)
+        if 'shot_time' in calc_df.columns: calc_df['shot_time'] = calc_df['shot_time'].astype(str)
+        if 'month' in calc_df.columns: calc_df['month'] = calc_df['month'].astype(str)
         calc_df.replace([np.inf, -np.inf], np.nan, inplace=True)
         calc_df = calc_df.fillna('')
         for col_num, value in enumerate(calc_df.columns.values):
@@ -443,8 +443,8 @@ def render_dashboard(df_tool, tool_id_selection, tolerance, downtime_gap_toleran
     if 'by Run' in analysis_level:
         st.sidebar.markdown("---")
         if not df_tool.empty:
-            df_tool = df_tool.copy()
-            run_shot_counts = df_tool.groupby('run_id').size()
+            df_tool_copy = df_tool.copy()
+            run_shot_counts = df_tool_copy.groupby('run_id').size()
             
             if not run_shot_counts.empty:
                 max_shots = int(run_shot_counts.max()) if not run_shot_counts.empty else 1
@@ -517,7 +517,7 @@ def render_dashboard(df_tool, tool_id_selection, tolerance, downtime_gap_toleran
         df_view = df_view[run_shot_counts_in_view >= min_shots_filter]
         runs_after_filter = df_view['run_label'].nunique()
         if runs_before_filter > 0:
-            st.sidebar.metric(label="Runs Displayed", value=f"{runs_after_filter} / {runs_before_filter}", delta=f"-{runs_before_filter - runs_after_filter} filtered", delta_color="off", key=f"runs_displayed_{tool_id_selection}")
+            st.sidebar.markdown(f"**Runs Displayed:** {runs_after_filter} / {runs_before_filter}")
 
     if df_view.empty:
         st.warning(f"No data for the selected period (or all runs were filtered out).")
@@ -723,8 +723,7 @@ def render_dashboard(df_tool, tool_id_selection, tolerance, downtime_gap_toleran
                 st.plotly_chart(fig_bucket_trend, use_container_width=True)
                 with st.expander("View Bucket Trend Data", expanded=False): st.dataframe(pivot_df)
                 if detailed_view:
-                    with st.expander("🤖 View Bucket Trend Analysis", expanded=False):
-                        st.markdown(generate_bucket_analysis(complete_runs, results["bucket_labels"]), unsafe_allow_html=True)
+                    with st.expander("🤖 View Bucket Trend Analysis", expanded=False): st.markdown(generate_bucket_analysis(complete_runs, results["bucket_labels"]), unsafe_allow_html=True)
             st.subheader(f"{trend_level} MTTR & MTBF Trend")
             if summary_df is not None and not summary_df.empty and summary_df['stops'].sum() > 0:
                 x_col = 'date' if trend_level == "Daily" else 'week'
@@ -1067,4 +1066,6 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
+
+
 
