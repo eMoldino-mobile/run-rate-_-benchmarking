@@ -259,6 +259,7 @@ def plot_mttr_mtbf_chart(df, x_col, mttr_col, mtbf_col, shots_col, title):
     fig.update_layout(title_text=title, yaxis_title="MTTR (min)", yaxis2_title="MTBF (min)", yaxis=dict(range=y_range_mttr), yaxis2=dict(range=y_range_mtbf), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
+
 def format_minutes_to_dhm(total_minutes):
     if pd.isna(total_minutes) or total_minutes < 0: return "N/A"
     total_minutes = int(total_minutes)
@@ -1059,5 +1060,4 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
-
 
