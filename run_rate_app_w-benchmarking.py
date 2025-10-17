@@ -14,7 +14,6 @@ from datetime import datetime, timedelta
 warnings.filterwarnings("ignore", category=FutureWarning)
 st.set_page_config(layout="wide", page_title="Run Rate Analysis Dashboard")
 
-
 # --- Constants ---
 PASTEL_COLORS = {
     'red': '#ff6961',
@@ -1394,17 +1393,35 @@ downtime_gap_tolerance = st.sidebar.slider("Downtime Gap Tolerance (sec)", 0.0, 
 run_interval_hours = st.sidebar.slider("Run Interval Threshold (hours)", 1, 24, 8, 1, help="Defines the max hours between shots before a new Production Run is identified.")
 st.sidebar.markdown("---")
 
+# --- GLOBAL DATA PROCESSING ---
+@st.cache_data
+def get_processed_data(df, interval_hours):
+    """Adds date, week, month, and a base run_id to the dataframe."""
+    df_processed = df.copy()
+    if not df_processed.empty:
+        df_processed['date'] = df_processed['shot_time'].dt.date
+        df_processed['week'] = df_processed['shot_time'].dt.isocalendar().week
+        df_processed['month'] = df_processed['shot_time'].dt.to_period('M')
+        # This creates a base run identifier that is consistent across the whole dataset
+        df_processed.sort_values('shot_time', inplace=True)
+        is_new_run = df_processed.groupby('tool_id')['shot_time'].diff().dt.total_seconds() > (interval_hours * 3600)
+        df_processed['run_id'] = is_new_run.cumsum()
+    return df_processed
+
+df_processed_all = get_processed_data(df_all_tools, run_interval_hours)
+
+
 # Logic to select the correct dataframe for the dashboard tab
 if dashboard_tool_id_selection == "All Tools (Risk Tower)":
-    if len(df_all_tools[id_col].unique()) > 0:
-        first_tool = sorted(df_all_tools[id_col].unique())[0]
-        df_for_dashboard = df_all_tools[df_all_tools[id_col] == first_tool]
+    if len(df_processed_all[id_col].unique()) > 0:
+        first_tool = sorted(df_processed_all[id_col].unique())[0]
+        df_for_dashboard = df_processed_all[df_processed_all[id_col] == first_tool]
         tool_id_for_dashboard_display = first_tool
     else:
         df_for_dashboard = pd.DataFrame()
         tool_id_for_dashboard_display = "No Tool Selected"
 else:
-    df_for_dashboard = df_all_tools[df_all_tools[id_col] == dashboard_tool_id_selection]
+    df_for_dashboard = df_processed_all[df_processed_all[id_col] == dashboard_tool_id_selection]
     tool_id_for_dashboard_display = dashboard_tool_id_selection
 
 
@@ -1421,5 +1438,8 @@ with tab2:
         st.info("Select a specific Tool ID from the sidebar to view its dashboard.")
         
 with tab3:
-    render_benchmarking_tab(df_all_tools, tolerance, downtime_gap_tolerance)
-
+    # Pass the globally selected tool for benchmarking
+    if tool_id_for_dashboard_display != "No Tool Selected":
+        render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
+    else:
+        st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
