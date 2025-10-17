@@ -410,21 +410,13 @@ def create_excel_export(df_view, results, tolerance, run_interval_hours, analysi
             ws_dash.write(f'C{row}', value, fmt)
             row += 1
         ws_raw = workbook.add_worksheet('Exported_Raw_Data')
-        df_to_export = df_view.copy()
-        if 'shot_time' in df_to_export.columns: df_to_export['shot_time'] = df_to_export['shot_time'].astype(str)
-        if 'month' in df_to_export.columns: df_to_export['month'] = df_to_export['month'].astype(str)
-        df_to_export.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df_to_export = df_to_export.fillna('')
+        df_to_export = df_view.copy().astype(object).fillna('')
         for col_num, value in enumerate(df_to_export.columns.values):
             ws_raw.write(0, col_num, value, header_format)
         for row_num, row_data in enumerate(df_to_export.itertuples(index=False), 1):
             ws_raw.write_row(row_num, 0, row_data)
         ws_calc = workbook.add_worksheet('Calculations_Data')
-        calc_df = results.get('processed_df', pd.DataFrame()).copy()
-        if 'shot_time' in calc_df.columns: calc_df['shot_time'] = calc_df['shot_time'].astype(str)
-        if 'month' in calc_df.columns: calc_df['month'] = calc_df['month'].astype(str)
-        calc_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        calc_df = calc_df.fillna('')
+        calc_df = results.get('processed_df', pd.DataFrame()).copy().astype(object).fillna('')
         for col_num, value in enumerate(calc_df.columns.values):
             ws_calc.write(0, col_num, value, header_format)
         for row_num, row_data in enumerate(calc_df.itertuples(index=False), 1):
@@ -1066,6 +1058,5 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
-
 
 
