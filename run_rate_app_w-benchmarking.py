@@ -1443,3 +1443,4 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
+
