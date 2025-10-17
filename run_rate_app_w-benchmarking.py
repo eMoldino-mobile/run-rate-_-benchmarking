@@ -1016,13 +1016,20 @@ def get_processed_data(df, interval_hours):
     """Adds date, week, month, and a base run_id to the dataframe."""
     df_processed = df.copy()
     if not df_processed.empty:
+        # Sort values to ensure correct diff calculation per tool
+        df_processed.sort_values(['tool_id', 'shot_time'], inplace=True)
+        # Calculate time difference between consecutive shots FOR EACH TOOL
+        df_processed['time_diff_sec'] = df_processed.groupby('tool_id')['shot_time'].diff().dt.total_seconds()
+        # The first shot for each tool will have a NaN diff, fill it with 0 or a default
+        df_processed['time_diff_sec'].fillna(0, inplace=True)
+
         df_processed['date'] = df_processed['shot_time'].dt.date
         df_processed['week'] = df_processed['shot_time'].dt.isocalendar().week
         df_processed['month'] = df_processed['shot_time'].dt.to_period('M')
+        
         # This creates a base run identifier that is consistent across the whole dataset
-        df_processed.sort_values('shot_time', inplace=True)
-        is_new_run = df_processed.groupby('tool_id')['shot_time'].diff().dt.total_seconds() > (interval_hours * 3600)
-        df_processed['run_id'] = is_new_run.cumsum()
+        is_new_run = df_processed['time_diff_sec'] > (interval_hours * 3600)
+        df_processed['run_id'] = is_new_run.cumsum() # This is the global run ID
     return df_processed
 
 df_processed_all = get_processed_data(df_all_tools, run_interval_hours)
