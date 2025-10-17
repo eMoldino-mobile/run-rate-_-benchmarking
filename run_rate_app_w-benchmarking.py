@@ -103,7 +103,10 @@ class RunRateCalculator:
         return pd.Series(stop_durations, index=stop_start_times)
 
     def _calculate_all_metrics(self) -> dict:
-        df = self._prepare_data()
+        df = self.df_raw.copy() # Use the raw copy passed to the calculator
+        if 'time_diff_sec' not in df.columns:
+            df = self._prepare_data() # Fallback if not already prepared
+
         if df.empty or "ACTUAL CT" not in df.columns:
             return {}
 
