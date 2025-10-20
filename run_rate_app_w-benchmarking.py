@@ -1067,7 +1067,7 @@ with tab2:
 with tab3:
     # Pass the globally selected tool for benchmarking
     if tool_id_for_dashboard_display != "No Tool Selected":
-        render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
+        render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance, run_interval_hours)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
 
