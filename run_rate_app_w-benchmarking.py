@@ -44,10 +44,8 @@ class RunRateCalculator:
         df = df.dropna(subset=["shot_time"]).sort_values("shot_time").reset_index(drop=True)
         if df.empty: return pd.DataFrame()
 
-        # Always calculate the raw time difference between consecutive timestamps.
         df["time_diff_sec"] = df["shot_time"].diff().dt.total_seconds()
 
-        # Handle the NaN for the first shot.
         if not df.empty and pd.isna(df.loc[0, "time_diff_sec"]):
             if "ACTUAL CT" in df.columns:
                 df.loc[0, "time_diff_sec"] = df.loc[0, "ACTUAL CT"]
@@ -63,8 +61,8 @@ class RunRateCalculator:
         
         hourly_groups = df.groupby('hour')
         stops = hourly_groups['stop_event'].sum()
-        total_downtime_sec = hourly_groups.apply(lambda x: x[x['stop_flag'] == 1]['adj_ct_sec'].sum())
-        uptime_min = df[df['stop_flag'] == 0].groupby('hour')['ACTUAL CT'].sum() / 60
+        total_downtime_sec = hourly_groups.apply(lambda x: x.loc[x['stop_flag'] == 1, 'adj_ct_sec'].sum())
+        uptime_min = df.loc[df['stop_flag'] == 0].groupby('hour')['ACTUAL CT'].sum() / 60
         shots = hourly_groups.size().rename('total_shots')
 
         hourly_summary = pd.DataFrame(index=range(24))
@@ -75,14 +73,14 @@ class RunRateCalculator:
         
         hourly_summary['mttr_min'] = (hourly_summary['total_downtime_sec'] / 60) / hourly_summary['stops'].replace(0, np.nan)
         hourly_summary['mtbf_min'] = hourly_summary['uptime_min'] / hourly_summary['stops'].replace(0, np.nan)
-        hourly_summary['mtbf_min'] = hourly_summary['mtbf_min'].fillna(hourly_summary['uptime_min'])
+        hourly_summary['mtbf_min'].fillna(hourly_summary['uptime_min'], inplace=True)
         
         effective_runtime_min = hourly_summary['uptime_min'] + (hourly_summary['total_downtime_sec'] / 60)
         
         hourly_summary['stability_index'] = np.where(
             effective_runtime_min > 0,
             (hourly_summary['uptime_min'] / effective_runtime_min) * 100,
-            np.where(hourly_summary['stops'] == 0, 100.0, 0.0)
+            100.0 if hourly_summary['stops'].all() == 0 else 0.0
         )
         return hourly_summary.fillna(0)
 
@@ -411,19 +409,23 @@ def create_excel_export(df_view, results, tolerance, run_interval_hours, analysi
             row += 1
 
         def write_df_to_sheet(worksheet, df):
-            df = df.copy()
-            # Convert complex types to strings for Excel compatibility
-            for col in df.columns:
-                if pd.api.types.is_datetime64_any_dtype(df[col].dtype) or isinstance(df[col].dtype, pd.PeriodDtype):
-                    df[col] = df[col].astype(str)
+            df_copy = df.copy()
+            for col in df_copy.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_copy[col].dtype) or isinstance(df_copy[col].dtype, pd.PeriodDtype):
+                    df_copy[col] = df_copy[col].astype(str)
             
-            df = df.astype(object).fillna('')
+            df_copy = df_copy.astype(object).fillna('')
             
-            for col_num, value in enumerate(df.columns.values):
+            for col_num, value in enumerate(df_copy.columns.values):
                 worksheet.write(0, col_num, value, header_format)
 
-            for row_num, row_data in enumerate(df.itertuples(index=False), 1):
-                worksheet.write_row(row_num, 0, row_data)
+            for row_num, row_data in enumerate(df_copy.itertuples(index=False), 1):
+                safe_row = [
+                    v.item() if isinstance(v, np.number) else
+                    "" if pd.isna(v) else v
+                    for v in row_data
+                ]
+                worksheet.write_row(row_num, 0, safe_row)
 
         ws_raw = workbook.add_worksheet('Exported_Raw_Data')
         write_df_to_sheet(ws_raw, df_view)
