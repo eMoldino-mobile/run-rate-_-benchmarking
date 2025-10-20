@@ -847,88 +847,65 @@ def render_risk_tower(df_all_tools):
         return [f'background-color: {color}' for _ in row]
     st.dataframe(risk_df.style.apply(style_risk, axis=1).format({'Risk Score': '{:.0f}'}), use_container_width=True, hide_index=True)
 
-def render_benchmarking_tab(df_all_tools, tolerance, downtime_gap_tolerance):
-    st.header("Tool Benchmarking")
+def render_benchmarking_tab(df_tool, tool_id, tolerance, downtime_gap_tolerance, run_interval_hours):
+    st.header(f"Benchmarking for Tool: {tool_id}")
+
+    min_date_allowed = df_tool['date'].min()
+    max_date_allowed = df_tool['date'].max()
+
+    st.subheader("Period A (Baseline)")
+    colA1, colA2 = st.columns(2)
+    with colA1:
+        start_date_A = st.date_input("Start Date A", min_date_allowed, min_value=min_date_allowed, max_value=max_date_allowed, key="start_A")
+    with colA2:
+        end_date_A = st.date_input("End Date A", min_date_allowed, min_value=start_date_A, max_value=max_date_allowed, key="end_A")
+
+    st.subheader("Period B (Comparison)")
+    colB1, colB2 = st.columns(2)
+    with colB1:
+        start_date_B = st.date_input("Start Date B", end_date_A + timedelta(days=1), min_value=min_date_allowed, max_value=max_date_allowed, key="start_B")
+    with colB2:
+        end_date_B = st.date_input("End Date B", end_date_A + timedelta(days=2), min_value=start_date_B, max_value=max_date_allowed, key="end_B")
+
+    df_A = df_tool[(df_tool['date'] >= start_date_A) & (df_tool['date'] <= end_date_A)].copy()
+    df_B = df_tool[(df_tool['date'] >= start_date_B) & (df_tool['date'] <= end_date_B)].copy()
+
+    # Recalculate runs locally for each period
+    if not df_A.empty:
+        df_A.sort_values('shot_time', inplace=True)
+        is_new_run_A = df_A['time_diff_sec'] > (run_interval_hours * 3600)
+        df_A['run_id'] = is_new_run_A.cumsum()
+    if not df_B.empty:
+        df_B.sort_values('shot_time', inplace=True)
+        is_new_run_B = df_B['time_diff_sec'] > (run_interval_hours * 3600)
+        df_B['run_id'] = is_new_run_B.cumsum()
+
+    res_A = RunRateCalculator(df_A, tolerance, downtime_gap_tolerance, 'aggregate').results if not df_A.empty else {}
+    res_B = RunRateCalculator(df_B, tolerance, downtime_gap_tolerance, 'aggregate').results if not df_B.empty else {}
     
-    # --- Controls within the tab ---
-    all_tool_ids = sorted(df_all_tools['tool_id'].unique().tolist())
+    data = {
+        'Period': ['A', 'B'],
+        'Stability (%)': [res_A.get('stability_index', 0), res_B.get('stability_index', 0)],
+        'MTTR (min)': [res_A.get('mttr_min', 0), res_B.get('mttr_min', 0)],
+        'MTBF (min)': [res_A.get('mtbf_min', 0), res_B.get('mtbf_min', 0)],
+        'Efficiency (%)': [res_A.get('efficiency', 0) * 100, res_B.get('efficiency', 0) * 100],
+        'Total Shots': [res_A.get('total_shots', 0), res_B.get('total_shots', 0)],
+        'Stop Events': [res_A.get('stop_events', 0), res_B.get('stop_events', 0)],
+    }
+    summary_df = pd.DataFrame(data)
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        selected_tools = st.multiselect(
-            "Select Tools to Compare",
-            options=all_tool_ids,
-            default=all_tool_ids[:2] if len(all_tool_ids) > 1 else all_tool_ids
-        )
-    
-    min_date_allowed = df_all_tools['shot_time'].min().date()
-    max_date_allowed = df_all_tools['shot_time'].max().date()
+    st.subheader("Performance Comparison")
+    st.dataframe(summary_df.style.format({
+        'Stability (%)': '{:.1f}%', 'MTTR (min)': '{:.1f}', 'MTBF (min)': '{:.1f}', 'Efficiency (%)': '{:.1f}%'
+    }), use_container_width=True)
 
-    with col2:
-        start_date = st.date_input("Start Date", min_date_allowed, min_value=min_date_allowed, max_value=max_date_allowed)
-    with col3:
-        end_date = st.date_input("End Date", max_date_allowed, min_value=start_date, max_value=max_date_allowed)
-
-    if not selected_tools:
-        st.info("Please select at least one tool to compare.")
-        return
-
-    # --- Data Processing and Display ---
-    benchmark_data = []
-    
-    # Filter the main dataframe by the selected period
-    period_mask = (df_all_tools['shot_time'].dt.date >= start_date) & (df_all_tools['shot_time'].dt.date <= end_date)
-    df_period = df_all_tools[period_mask]
-
-    for tool in selected_tools:
-        df_tool_period = df_period[df_period['tool_id'] == tool]
-        
-        if df_tool_period.empty:
-            # Add a placeholder for tools with no data in the period
-            metrics = {'Tool ID': tool, 'Stability (%)': 0, 'MTTR (min)': 0, 'MTBF (min)': 0, 'Total Shots': 0, 'Stop Events': 0, 'Efficiency (%)': 0}
-        else:
-            calc = RunRateCalculator(df_tool_period, tolerance, downtime_gap_tolerance, analysis_mode='aggregate')
-            res = calc.results
-            metrics = {
-                'Tool ID': tool,
-                'Stability (%)': res.get('stability_index', 0),
-                'MTTR (min)': res.get('mttr_min', 0),
-                'MTBF (min)': res.get('mtbf_min', 0),
-                'Total Shots': res.get('total_shots', 0),
-                'Stop Events': res.get('stop_events', 0),
-                'Efficiency (%)': res.get('efficiency', 0) * 100
-            }
-        benchmark_data.append(metrics)
-
-    if benchmark_data:
-        summary_df = pd.DataFrame(benchmark_data)
-        
-        st.subheader("Performance Comparison")
-        st.dataframe(summary_df.style.format({
-            'Stability (%)': '{:.1f}%',
-            'MTTR (min)': '{:.1f}',
-            'MTBF (min)': '{:.1f}',
-            'Efficiency (%)': '{:.1f}%'
-        }), use_container_width=True)
-
-        st.subheader("Visual Comparison")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            fig_stability = px.bar(summary_df, x='Tool ID', y='Stability (%)', title='Stability Index Comparison', text_auto='.1f', color='Tool ID')
-            fig_stability.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
-            st.plotly_chart(fig_stability, use_container_width=True)
-
-            fig_efficiency = px.bar(summary_df, x='Tool ID', y='Efficiency (%)', title='Efficiency Comparison', text_auto='.1f', color='Tool ID')
-            fig_efficiency.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
-            st.plotly_chart(fig_efficiency, use_container_width=True)
-
-        with col2:
-            fig_mttr = px.bar(summary_df, x='Tool ID', y='MTTR (min)', title='MTTR Comparison', text_auto='.1f', color='Tool ID')
-            st.plotly_chart(fig_mttr, use_container_width=True)
-            
-            fig_mtbf = px.bar(summary_df, x='Tool ID', y='MTBF (min)', title='MTBF Comparison', text_auto='.1f', color='Tool ID')
-            st.plotly_chart(fig_mtbf, use_container_width=True)
+    # --- Automated Insights ---
+    st.subheader("🤖 Automated Analysis")
+    if not res_A or not res_B:
+        st.warning("Not enough data in one or both periods to generate insights.")
+    else:
+        # ... [rest of the function remains the same]
+        st.info("Insights generation is a work in progress.")
 
 # --- Main App Structure ---
 st.sidebar.title("File Upload")
