@@ -612,11 +612,11 @@ def generate_comparison_analysis(res_a, res_b):
         if val_a == 0: return f"increased to {val_b:.1f}{'%' if is_percent else ''}"
         
         diff = val_b - val_a
-        pct_change = (diff / val_a) * 100
+        pct_change = (diff / abs(val_a)) * 100 if val_a != 0 else float('inf')
         
         direction_text = "improved" if (diff > 0 and higher_is_better) or (diff < 0 and not higher_is_better) else "declined"
         
-        return f"{direction_text} by {abs(pct_change):.1f}% (from {val_a:.1f} to {val_b:.1f}{'%' if is_percent else ''})"
+        return f"{direction_text} by {abs(pct_change):.1f}% (from {val_a:.1f}{'%' if is_percent else ''} to {val_b:.1f}{'%' if is_percent else ''})"
 
     stability_a = res_a.get('stability_index', 0)
     stability_b = res_b.get('stability_index', 0)
@@ -640,15 +640,15 @@ def generate_comparison_analysis(res_a, res_b):
     if abs(stability_diff) > 2: # Only analyze significant changes
         # Determine if the change was primarily due to MTTR or MTBF
         # This is a heuristic: which change was more "impactful"?
-        mttr_impact = (mttr_b - mttr_a) / mttr_a if mttr_a > 0 else 0
-        mtbf_impact = (mtbf_b - mtbf_a) / mtbf_a if mtbf_a > 0 else 0
+        mttr_impact = (mttr_b - mttr_a) / mttr_a if mttr_a > 0 else (1 if mttr_b > 0 else 0)
+        mtbf_impact = (mtbf_b - mtbf_a) / mtbf_a if mtbf_a > 0 else (1 if mtbf_b > 0 else 0)
         
         if abs(mttr_impact) > abs(mtbf_impact) * 1.5:
-            driver_analysis = f"The primary driver for this change was a significant adjustment in downtime duration. The average time to repair (MTTR) <strong>{mttr_change_text} minutes</strong>. "
+            driver_analysis = f"The primary driver for this change was a significant adjustment in downtime duration. The average time to repair (MTTR) <strong>{mttr_change_text}</strong>. "
         elif abs(mtbf_impact) > abs(mttr_impact) * 1.5:
-            driver_analysis = f"This was mainly driven by a change in stop frequency. The average time between failures (MTBF) <strong>{mtbf_change_text} minutes</strong>. "
+            driver_analysis = f"This was mainly driven by a change in stop frequency. The average time between failures (MTBF) <strong>{mtbf_change_text}</strong>. "
         else:
-            driver_analysis = f"This was driven by a combination of factors, with downtime duration (MTTR) <strong>{mttr_change_text} minutes</strong> and stop frequency (MTBF) <strong>{mtbf_change_text} minutes</strong>. "
+            driver_analysis = f"This was driven by a combination of factors, with downtime duration (MTTR) <strong>{mttr_change_text}</strong> and stop frequency (MTBF) <strong>{mtbf_change_text}</strong>. "
 
     stop_analysis = f"The total number of stop events changed from <strong>{stops_a}</strong> to <strong>{stops_b}</strong>."
 
@@ -1354,13 +1354,29 @@ def render_benchmarking_tab(df_tool, tool_id, tolerance, downtime_gap_tolerance)
     with col1:
         st.subheader("Period A (Baseline)")
         start_date_a = st.date_input("Start Date A", min_date, min_value=min_date, max_value=max_date, key="start_a")
-        end_date_a = st.date_input("End Date A", min_date + timedelta(days=7), min_value=start_date_a, max_value=max_date, key="end_a")
+        
+        # Ensure the default end_date_a is valid
+        default_end_a = min(start_date_a + timedelta(days=7), max_date)
+        end_date_a = st.date_input("End Date A", default_end_a, min_value=start_date_a, max_value=max_date, key="end_a")
 
     with col2:
         st.subheader("Period B (Comparison)")
-        default_start_b = min(max_date, end_date_a + timedelta(days=1))
-        start_date_b = st.date_input("Start Date B", default_start_b, min_value=min_date, max_value=max_date, key="start_b")
-        end_date_b = st.date_input("End Date B", max_date, min_value=start_date_b, max_value=max_date, key="end_b")
+        # The earliest start for B is one day after A ends.
+        min_start_b = end_date_a + timedelta(days=1)
+        
+        # Check if a valid Period B is possible
+        if min_start_b > max_date:
+            st.warning("Period A ends on the last day of data. Please select an earlier end date for Period A to enable Period B selection.")
+            # Disable the Period B date pickers to prevent errors
+            st.date_input("Start Date B", min_start_b, min_value=min_start_b, max_value=max_date, key="start_b", disabled=True)
+            st.date_input("End Date B", max_date, min_value=min_start_b, max_value=max_date, key="end_b", disabled=True)
+            return
+
+        start_date_b = st.date_input("Start Date B", min_start_b, min_value=min_start_b, max_value=max_date, key="start_b")
+        
+        # Ensure the default end_date_b is valid
+        default_end_b = min(start_date_b + timedelta(days=7), max_date)
+        end_date_b = st.date_input("End Date B", default_end_b, min_value=start_date_b, max_value=max_date, key="end_b")
         
     df_a = df_tool[(df_tool['date'] >= start_date_a) & (df_tool['date'] <= end_date_a)]
     df_b = df_tool[(df_tool['date'] >= start_date_b) & (df_tool['date'] <= end_date_b)]
@@ -1517,3 +1533,4 @@ with tab3:
         render_benchmarking_tab(df_for_analysis, tool_id_for_display, tolerance_bm, downtime_gap_tolerance_bm)
     else:
         st.info("Select a tool from the sidebar to begin.")
+
