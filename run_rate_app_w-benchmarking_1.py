@@ -294,10 +294,7 @@ def calculate_run_summaries(df_period, tolerance, downtime_gap_tolerance):
         for run_label, df_run in df_period.groupby('run_label') if not df_run.empty
     ]
     if not run_summary_list: return pd.DataFrame()
-    df_summary = pd.DataFrame(run_summary_list).sort_values('start_time').reset_index(drop=True)
-    if 'stop_events' in df_summary.columns:
-        df_summary.rename(columns={'stop_events': 'stops'}, inplace=True)
-    return df_summary
+    return pd.DataFrame(run_summary_list).sort_values('start_time').reset_index(drop=True)
 
 # --- Analysis Engine Functions ---
 def generate_detailed_analysis(analysis_df, overall_stability, overall_mttr, overall_mtbf, analysis_level):
@@ -534,9 +531,7 @@ def render_dashboard(df_tool, tool_id_selection, tolerance, downtime_gap_toleran
             run_summary_df_for_totals = calculate_run_summaries(df_view, tolerance, downtime_gap_tolerance)
             if not run_summary_df_for_totals.empty:
                 total_runtime_sec, production_time_sec, downtime_sec = run_summary_df_for_totals['total_runtime_sec'].sum(), run_summary_df_for_totals['production_time_sec'].sum(), run_summary_df_for_totals['downtime_sec'].sum()
-                total_shots = run_summary_df_for_totals.get('total_shots', pd.Series(dtype='float')).sum()
-                normal_shots = run_summary_df_for_totals.get('normal_shots', pd.Series(dtype='float')).sum()
-                stop_events = run_summary_df_for_totals.get('stops', pd.Series(dtype='float')).sum()
+                total_shots, normal_shots, stop_events = run_summary_df_for_totals['total_shots'].sum(), run_summary_df_for_totals['normal_shots'].sum(), run_summary_df_for_totals['stops'].sum()
                 mttr_min = (downtime_sec / 60 / stop_events) if stop_events > 0 else 0
                 mtbf_min = (production_time_sec / 60 / stop_events) if stop_events > 0 else (production_time_sec / 60)
                 stability_index = (production_time_sec / total_runtime_sec * 100) if total_runtime_sec > 0 else 100.0
@@ -1052,4 +1047,5 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance, run_interval_hours)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
+
 
