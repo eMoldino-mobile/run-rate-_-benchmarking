@@ -80,7 +80,7 @@ class RunRateCalculator:
         hourly_summary['stability_index'] = np.where(
             effective_runtime_min > 0,
             (hourly_summary['uptime_min'] / effective_runtime_min) * 100,
-            100.0 if hourly_summary['stops'].all() == 0 else 0.0
+            100.0 if hourly_summary['stops'].eq(0).all() else 0.0
         )
         return hourly_summary.fillna(0)
 
