@@ -409,18 +409,28 @@ def create_excel_export(df_view, results, tolerance, run_interval_hours, analysi
             elif 'Duration' in label or 'Time' in label: fmt = dhm_format
             ws_dash.write(f'C{row}', value, fmt)
             row += 1
+
+        def write_df_to_sheet(worksheet, df):
+            df = df.copy()
+            # Convert complex types to strings for Excel compatibility
+            for col in df.columns:
+                if pd.api.types.is_datetime64_any_dtype(df[col].dtype) or isinstance(df[col].dtype, pd.PeriodDtype):
+                    df[col] = df[col].astype(str)
+            
+            df = df.astype(object).fillna('')
+            
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+
+            for row_num, row_data in enumerate(df.itertuples(index=False), 1):
+                worksheet.write_row(row_num, 0, row_data)
+
         ws_raw = workbook.add_worksheet('Exported_Raw_Data')
-        df_to_export = df_view.copy().astype(object).fillna('')
-        for col_num, value in enumerate(df_to_export.columns.values):
-            ws_raw.write(0, col_num, value, header_format)
-        for row_num, row_data in enumerate(df_to_export.itertuples(index=False), 1):
-            ws_raw.write_row(row_num, 0, row_data)
+        write_df_to_sheet(ws_raw, df_view)
+        
         ws_calc = workbook.add_worksheet('Calculations_Data')
-        calc_df = results.get('processed_df', pd.DataFrame()).copy().astype(object).fillna('')
-        for col_num, value in enumerate(calc_df.columns.values):
-            ws_calc.write(0, col_num, value, header_format)
-        for row_num, row_data in enumerate(calc_df.itertuples(index=False), 1):
-            ws_calc.write_row(row_num, 0, row_data)
+        write_df_to_sheet(ws_calc, results.get('processed_df', pd.DataFrame()))
+
     return output_buffer.getvalue()
 
 def render_dashboard(df_tool, tool_id_selection, tolerance, downtime_gap_tolerance, run_interval_hours):
@@ -1058,5 +1068,4 @@ with tab3:
         render_benchmarking_tab(df_for_dashboard, tool_id_for_dashboard_display, tolerance, downtime_gap_tolerance)
     else:
         st.info("Select a specific Tool ID from the sidebar to use the benchmarking tool.")
-
 
